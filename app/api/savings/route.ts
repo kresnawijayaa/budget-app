@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { Config, DailyLog, toDayEntry, calculateCycleSummary } from '@/lib/budget-utils';
+import { Config, DailyLog, toDayEntry } from '@/lib/budget-utils';
 
 export async function GET() {
     try {
@@ -8,42 +8,28 @@ export async function GET() {
         const configResult = await query<Config>('SELECT * FROM config WHERE id = 1');
         const config = configResult.rows[0];
 
-        // Get all cycles ordered chronologically
-        const cyclesResult = await query(
-            'SELECT * FROM cycles ORDER BY year ASC, month ASC'
+        // Get all daily logs across all cycles (only filled ones contribute)
+        const logsResult = await query<DailyLog>(
+            'SELECT * FROM daily_logs ORDER BY log_date ASC'
         );
 
-        let totalVariance = 0;
-
-        const cycleDetails = [];
-
-        for (const cycle of cyclesResult.rows as { id: number; year: number; month: number; start_date: string; end_date: string }[]) {
-            const logsResult = await query<DailyLog>(
-                'SELECT * FROM daily_logs WHERE cycle_id = $1 ORDER BY log_date ASC',
-                [cycle.id]
-            );
-
-            const entries = logsResult.rows.map(log => toDayEntry(log, config));
-            const startDate = new Date(cycle.start_date + 'T00:00:00');
-            const endDate = new Date(cycle.end_date + 'T00:00:00');
-            const summary = calculateCycleSummary(entries, startDate, endDate, config);
-
-            totalVariance += summary.total_variance;
-
-            cycleDetails.push({
-                year: cycle.year,
-                month: cycle.month,
-                total_variance: summary.total_variance,
-            });
+        // Sum variance only from days where actual_amount has been filled
+        let filledVariance = 0;
+        for (const log of logsResult.rows) {
+            if (log.actual_amount !== null) {
+                const entry = toDayEntry(log, config);
+                if (entry.variance !== null) {
+                    filledVariance += entry.variance;
+                }
+            }
         }
 
-        const total_savings = config.initial_savings + totalVariance;
+        const total_savings = (config.initial_savings as number) + filledVariance;
 
         return NextResponse.json({
             initial_savings: config.initial_savings,
-            cumulative_variance: totalVariance,
+            filled_variance: filledVariance,
             total_savings,
-            cycles: cycleDetails,
         });
     } catch (error) {
         console.error('GET /api/savings error:', error);

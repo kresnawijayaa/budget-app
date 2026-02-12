@@ -23,7 +23,7 @@ interface CycleData {
 export default function Dashboard() {
   const [currentYM, setCurrentYM] = useState(getCurrentCycleYearMonth());
   const [cycleData, setCycleData] = useState<CycleData | null>(null);
-  const [totalSavings, setTotalSavings] = useState<number>(0);
+  const [savings, setSavings] = useState({ initial_savings: 0, filled_variance: 0, total_savings: 0 });
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -67,7 +67,7 @@ export default function Dashboard() {
       const res = await fetch('/api/savings');
       if (res.ok) {
         const data = await res.json();
-        setTotalSavings(data.total_savings);
+        setSavings(data);
       }
     } catch { /* silent */ }
   }, []);
@@ -139,9 +139,20 @@ export default function Dashboard() {
       summary: newSummary,
     });
 
-    // Update savings optimistically
-    const varianceDiff = newSummary.total_variance - prevData.summary.total_variance;
-    setTotalSavings(prev => prev + varianceDiff);
+    // Update savings optimistically — compute filled variance diff
+    const oldFilledVar = prevData.entries
+      .filter(e => e.actual_amount !== null && e.variance !== null)
+      .reduce((sum, e) => sum + (e.variance ?? 0), 0);
+    const newFilledVar = updatedEntries
+      .filter(e => e.actual_amount !== null && e.variance !== null)
+      .reduce((sum, e) => sum + (e.variance ?? 0), 0);
+    const varianceDiff = newFilledVar - oldFilledVar;
+    const prevSavings = savings;
+    setSavings(prev => ({
+      ...prev,
+      filled_variance: prev.filled_variance + varianceDiff,
+      total_savings: prev.total_savings + varianceDiff,
+    }));
 
     // Send to server in background
     try {
@@ -153,13 +164,13 @@ export default function Dashboard() {
       if (!res.ok) {
         // Rollback on failure
         setCycleData(prevData);
-        setTotalSavings(prev => prev - varianceDiff);
+        setSavings(prevSavings);
         showToast('Gagal update', 'error');
       }
     } catch {
       // Rollback on network error
       setCycleData(prevData);
-      setTotalSavings(prev => prev - varianceDiff);
+      setSavings(prevSavings);
       showToast('Gagal update', 'error');
     }
   };
@@ -246,7 +257,11 @@ export default function Dashboard() {
             />
 
             <AdditionalExpenses summary={cycleData.summary} />
-            <SavingsDisplay totalSavings={totalSavings} />
+            <SavingsDisplay
+              initialSavings={savings.initial_savings}
+              filledVariance={savings.filled_variance}
+              totalSavings={savings.total_savings}
+            />
 
             <button
               className="btn btn-danger"
