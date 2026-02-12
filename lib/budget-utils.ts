@@ -6,12 +6,7 @@ export interface Config {
     gas_per_fill: number;
     gas_fill_interval_days: number;
     initial_savings: number;
-
-    id: number
-    app_name: string
-    version: string
-
-    [key: string]: any
+    [key: string]: unknown;
 }
 
 export interface DailyLog {
@@ -20,6 +15,7 @@ export interface DailyLog {
     log_date: string;
     is_wfo: boolean;
     actual_amount: number | null;
+    [key: string]: unknown;
 }
 
 export interface DayEntry extends DailyLog {
