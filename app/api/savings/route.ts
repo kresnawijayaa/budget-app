@@ -1,35 +1,74 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { Config, DailyLog, toDayEntry } from '@/lib/budget-utils';
+import { ConfigVersion, DailyLog, toDayEntry } from '@/lib/budget-utils';
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
-        // Get config (for initial_savings and budget calculations)
-        const configResult = await query<Config>('SELECT * FROM config WHERE id = 1');
-        const config = configResult.rows[0];
+        const { searchParams } = new URL(request.url);
+        const currentYear = searchParams.get('year');
+        const currentMonth = searchParams.get('month');
 
-        // Get all daily logs across all cycles (only filled ones contribute)
-        const logsResult = await query<DailyLog>(
-            'SELECT * FROM daily_logs ORDER BY log_date ASC'
+        // Get all cycles ordered chronologically
+        const cyclesResult = await query(
+            'SELECT * FROM cycles ORDER BY year ASC, month ASC'
         );
 
-        // Sum variance only from days where actual_amount has been filled
-        let filledVariance = 0;
-        for (const log of logsResult.rows) {
-            if (log.actual_amount !== null) {
-                const entry = toDayEntry(log, config);
-                if (entry.variance !== null) {
-                    filledVariance += entry.variance;
+        let totalBalance = 0;
+        let balanceBeforeCurrentMonth = 0;
+        let currentMonthVariance = 0;
+
+        for (const cycle of cyclesResult.rows as { id: number; year: number; month: number; config_version_id: number | null }[]) {
+            // Load correct config version for this cycle
+            let config: ConfigVersion;
+            if (cycle.config_version_id) {
+                const cvResult = await query<ConfigVersion>('SELECT * FROM config_versions WHERE id = $1', [cycle.config_version_id]);
+                config = cvResult.rows[0];
+            } else {
+                const cvResult = await query<ConfigVersion>('SELECT * FROM config_versions ORDER BY id DESC LIMIT 1');
+                config = cvResult.rows[0];
+            }
+
+            // Get daily logs for this cycle
+            const logsResult = await query<DailyLog>(
+                'SELECT * FROM daily_logs WHERE cycle_id = $1',
+                [cycle.id]
+            );
+
+            // Sum variance from filled days
+            let cycleVariance = 0;
+            for (const log of logsResult.rows) {
+                if (log.actual_amount !== null) {
+                    const entry = toDayEntry(log, config);
+                    if (entry.variance !== null) {
+                        cycleVariance += entry.variance;
+                    }
                 }
+            }
+
+            totalBalance += cycleVariance;
+
+            // Check if this is before the current month
+            const isBeforeCurrent = currentYear && currentMonth &&
+                (cycle.year < parseInt(currentYear) ||
+                    (cycle.year === parseInt(currentYear) && cycle.month < parseInt(currentMonth)));
+
+            const isCurrentMonth = currentYear && currentMonth &&
+                cycle.year === parseInt(currentYear) && cycle.month === parseInt(currentMonth);
+
+            if (isBeforeCurrent) {
+                balanceBeforeCurrentMonth += cycleVariance;
+            }
+
+            if (isCurrentMonth) {
+                currentMonthVariance = cycleVariance;
             }
         }
 
-        const total_savings = (config.initial_savings as number) + filledVariance;
-
         return NextResponse.json({
-            initial_savings: config.initial_savings,
-            filled_variance: filledVariance,
-            total_savings,
+            total_balance: totalBalance,
+            balance_at_month_start: balanceBeforeCurrentMonth,
+            current_month_variance: currentMonthVariance,
+            current_balance: balanceBeforeCurrentMonth + currentMonthVariance,
         });
     } catch (error) {
         console.error('GET /api/savings error:', error);

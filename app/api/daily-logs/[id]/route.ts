@@ -30,6 +30,18 @@ export async function PATCH(
             paramIndex++;
         }
 
+        if (body.custom_label !== undefined) {
+            updates.push(`custom_label = $${paramIndex}`);
+            values.push(body.custom_label);
+            paramIndex++;
+        }
+
+        if (body.custom_budget !== undefined) {
+            updates.push(`custom_budget = $${paramIndex}`);
+            values.push(body.custom_budget);
+            paramIndex++;
+        }
+
         if (updates.length === 0) {
             return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
         }

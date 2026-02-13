@@ -3,29 +3,29 @@
 import { formatRupiah } from '@/lib/budget-utils';
 
 interface SavingsDisplayProps {
-    initialSavings: number;
-    filledVariance: number;
-    totalSavings: number;
+    balanceAtMonthStart: number;
+    currentMonthVariance: number;
+    currentBalance: number;
 }
 
-export default function SavingsDisplay({ initialSavings, filledVariance, totalSavings }: SavingsDisplayProps) {
+export default function SavingsDisplay({ balanceAtMonthStart, currentMonthVariance, currentBalance }: SavingsDisplayProps) {
     return (
         <div className="savings-card">
             <div className="savings-label">
-                💰 Total Tabungan
+                🏦 Saldo Rekening
             </div>
             <div className="savings-value">
-                {formatRupiah(totalSavings)}
+                {formatRupiah(currentBalance)}
             </div>
             <div className="savings-breakdown">
                 <div className="savings-detail">
-                    <span className="savings-detail-label">🏦 Di rekening</span>
-                    <span className="savings-detail-value">{formatRupiah(initialSavings)}</span>
+                    <span className="savings-detail-label">💰 Saldo awal bulan</span>
+                    <span className="savings-detail-value">{formatRupiah(balanceAtMonthStart)}</span>
                 </div>
                 <div className="savings-detail">
-                    <span className="savings-detail-label">📊 Variance terisi</span>
-                    <span className={`savings-detail-value ${filledVariance >= 0 ? 'positive' : 'negative'}`}>
-                        {filledVariance >= 0 ? '+' : ''}{formatRupiah(filledVariance)}
+                    <span className="savings-detail-label">📊 Variance bulan ini</span>
+                    <span className={`savings-detail-value ${currentMonthVariance >= 0 ? 'positive' : 'negative'}`}>
+                        {currentMonthVariance >= 0 ? '+' : ''}{formatRupiah(currentMonthVariance)}
                     </span>
                 </div>
             </div>

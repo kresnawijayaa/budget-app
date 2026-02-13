@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const { year, month } = await request.json();
+        const { year, month, config_version_id } = await request.json();
 
         if (!year || !month || month < 1 || month > 12) {
             return NextResponse.json({ error: 'Invalid year or month' }, { status: 400 });
@@ -26,6 +26,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Cycle already exists', cycle_id: (existing.rows[0] as { id: number }).id }, { status: 409 });
         }
 
+        // Determine config version: use provided, or latest
+        let versionId = config_version_id;
+        if (!versionId) {
+            const latestVersion = await query('SELECT id FROM config_versions ORDER BY id DESC LIMIT 1');
+            versionId = latestVersion.rows.length > 0 ? (latestVersion.rows[0] as { id: number }).id : null;
+        }
+
         const startDate = getCycleStartDate(year, month);
         const endDate = getCycleEndDate(year, month);
 
@@ -34,8 +41,8 @@ export async function POST(request: Request) {
 
         // Create cycle
         const cycleResult = await query<{ id: number }>(
-            'INSERT INTO cycles (year, month, start_date, end_date) VALUES ($1, $2, $3, $4) RETURNING id',
-            [year, month, startStr, endStr]
+            'INSERT INTO cycles (year, month, start_date, end_date, config_version_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [year, month, startStr, endStr, versionId]
         );
         const cycleId = cycleResult.rows[0].id;
 
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
             params
         );
 
-        return NextResponse.json({ id: cycleId, year, month, start_date: startStr, end_date: endStr, days: dates.length }, { status: 201 });
+        return NextResponse.json({ id: cycleId, year, month, start_date: startStr, end_date: endStr, config_version_id: versionId, days: dates.length }, { status: 201 });
     } catch (error) {
         console.error('POST /api/cycles error:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

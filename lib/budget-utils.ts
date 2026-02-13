@@ -1,13 +1,22 @@
-export interface Config {
+export interface ConfigVersion {
+    id: number;
+    name: string;
     weekday_budget: number;
     weekend_budget: number;
     carbo_loading_budget: number;
     parking_per_day: number;
     gas_per_fill: number;
     gas_fill_interval_days: number;
+    [key: string]: unknown;
+}
+
+export interface AppSettings {
     initial_savings: number;
     [key: string]: unknown;
 }
+
+// Alias for backward compatibility in calculation functions
+export type Config = ConfigVersion;
 
 export interface DailyLog {
     id: number;
@@ -15,6 +24,8 @@ export interface DailyLog {
     log_date: string;
     is_wfo: boolean;
     actual_amount: number | null;
+    custom_label?: string | null;
+    custom_budget?: number | null;
     [key: string]: unknown;
 }
 
@@ -139,18 +150,43 @@ export function parseLogDate(logDate: string): Date {
 
 export function toDayEntry(log: DailyLog, config: Config): DayEntry {
     const date = parseLogDate(log.log_date);
-    const budget = getDailyBudget(date, log.is_wfo, config);
-    const variance = log.actual_amount !== null ? budget - log.actual_amount : null;
+    const dayOfWeek = date.getDay();
+    const dayName = DAY_NAMES_ID[dayOfWeek];
+
+    // Budget priority: custom_budget > is_wfo (0) > config-based
+    let budget: number;
+    if (log.custom_budget !== undefined && log.custom_budget !== null) {
+        budget = log.custom_budget;
+    } else if (log.is_wfo) {
+        budget = 0;
+    } else {
+        // Config-based calculation
+        if (dayOfWeek === 5) budget = config.carbo_loading_budget;
+        else if (dayOfWeek === 0 || dayOfWeek === 6) budget = config.weekend_budget;
+        else budget = config.weekday_budget;
+    }
+
+    // Detail priority: custom_label > WFO > Carbo Loading > empty
+    let detail = '';
+    if (log.custom_label) {
+        detail = log.custom_label;
+    } else if (log.is_wfo) {
+        detail = 'WFO';
+    } else if (dayOfWeek === 5) {
+        detail = 'Carbo Loading';
+    }
+
+    const variance = log.actual_amount !== null ? budget - log.actual_amount : null; // Reverted variance calculation to budget - actual
 
     // Store the normalized date string for consistent comparison
     const normalizedLogDate = dateToString(date);
 
     return {
         ...log,
-        log_date: normalizedLogDate,
-        day_of_week: date.getDay(),
-        day_name: getDayName(date),
-        detail: getDayDetail(date, log.is_wfo),
+        log_date: normalizedLogDate, // Added back normalizedLogDate
+        day_of_week: dayOfWeek,
+        day_name: dayName,
+        detail,
         budget,
         variance,
     };
@@ -185,7 +221,9 @@ export function calculateCycleSummary(
     const parking_budget = parking_days * config.parking_per_day;
 
     const gas_days = countCycleDays(startDate, endDate);
-    const gas_budget = Math.round((gas_days * config.gas_per_fill) / config.gas_fill_interval_days);
+    const gas_budget = config.gas_fill_interval_days > 0
+        ? Math.round((gas_days * config.gas_per_fill) / config.gas_fill_interval_days)
+        : 0;
 
     return {
         budget_sum,
