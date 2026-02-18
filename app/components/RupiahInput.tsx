@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface RupiahInputProps {
-    value: number;
-    onChange: (value: number) => void;
+    value: number | null;
+    onChange: (value: number | null) => void;
     onEnter?: () => void;
     placeholder?: string;
     className?: string;
@@ -14,17 +14,17 @@ interface RupiahInputProps {
 /**
  * Format number with Indonesian thousand separator (dot)
  */
-function formatWithDots(num: number): string {
-    if (num === 0) return '';
+function formatWithDots(num: number | null): string {
+    if (num === null) return '';
     return num.toLocaleString('id-ID');
 }
 
 /**
  * Parse a formatted string back to a number
  */
-function parseFromFormatted(str: string): number {
+function parseFromFormatted(str: string): number | null {
     const digits = str.replace(/\D/g, '');
-    if (digits === '') return 0;
+    if (digits === '') return null;
     return parseInt(digits, 10);
 }
 

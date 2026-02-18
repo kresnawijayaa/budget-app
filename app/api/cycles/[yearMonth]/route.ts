@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { ConfigVersion, DailyLog, toDayEntry, calculateCycleSummary } from '@/lib/budget-utils';
+import { ConfigVersion, DailyLog, toDayEntry, calculateCycleSummary, OtherExpense } from '@/lib/budget-utils';
 
 export async function GET(
     _request: Request,
@@ -48,10 +48,17 @@ export async function GET(
         // Compute entries with budget info
         const entries = logsResult.rows.map(log => toDayEntry(log, config));
 
+        // Get other expenses (parking/gas)
+        const otherExpensesResult = await query<OtherExpense>(
+            'SELECT * FROM other_expenses WHERE cycle_id = $1 ORDER BY expense_date DESC, id DESC',
+            [cycle.id]
+        );
+        const otherExpenses = otherExpensesResult.rows;
+
         // Compute summary
         const startDate = new Date(cycle.start_date + 'T00:00:00');
         const endDate = new Date(cycle.end_date + 'T00:00:00');
-        const summary = calculateCycleSummary(entries, startDate, endDate, config);
+        const summary = calculateCycleSummary(entries, startDate, endDate, config, otherExpenses);
 
         return NextResponse.json({
             cycle,

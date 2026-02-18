@@ -8,13 +8,17 @@ export async function GET(request: Request) {
         const currentYear = searchParams.get('year');
         const currentMonth = searchParams.get('month');
 
+        // Get initial savings
+        const settingsResult = await query<{ initial_savings: number }>('SELECT initial_savings FROM config WHERE id = 1');
+        const initialSavings = settingsResult.rows[0]?.initial_savings || 0;
+
         // Get all cycles ordered chronologically
         const cyclesResult = await query(
             'SELECT * FROM cycles ORDER BY year ASC, month ASC'
         );
 
-        let totalBalance = 0;
-        let balanceBeforeCurrentMonth = 0;
+        let totalBalance = initialSavings;
+        let balanceBeforeCurrentMonth = initialSavings;
         let currentMonthVariance = 0;
 
         for (const cycle of cyclesResult.rows as { id: number; year: number; month: number; config_version_id: number | null }[]) {

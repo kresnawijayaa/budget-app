@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  DayEntry, CycleSummary, ConfigVersion,
+  DayEntry, CycleSummary, ConfigVersion, OtherExpense,
   getCurrentCycleYearMonth, getPrevCycleYearMonth, getNextCycleYearMonth,
   getMonthName, dateToString, toDayEntry, calculateCycleSummary,
 } from '@/lib/budget-utils';
@@ -23,14 +23,21 @@ interface CycleData {
 export default function Dashboard() {
   const [currentYM, setCurrentYM] = useState(getCurrentCycleYearMonth());
   const [cycleData, setCycleData] = useState<CycleData | null>(null);
-  const [savings, setSavings] = useState({ balance_at_month_start: 0, current_month_variance: 0, current_balance: 0 });
+  const [otherExpenses, setOtherExpenses] = useState<OtherExpense[]>([]);
+  const [savings, setSavings] = useState<{ balance_at_month_start: number; current_month_variance: number; current_balance: number } | null>(null);
+  const [savingsLoading, setSavingsLoading] = useState(true);
   const [configVersions, setConfigVersions] = useState<ConfigVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const initialScrollDone = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const currentCycle = getCurrentCycleYearMonth();
   const maxYM = getNextCycleYearMonth(currentCycle.year, currentCycle.month);
@@ -59,8 +66,11 @@ export default function Dashboard() {
       if (res.status === 404) {
         setNotFound(true);
         setCycleData(null);
+        setOtherExpenses([]);
       } else if (res.ok) {
-        setCycleData(await res.json());
+        const data = await res.json();
+        setCycleData(data);
+        setOtherExpenses(data.summary?.other_expenses ?? []);
       }
     } catch {
       showToast('Gagal ambil data', 'error');
@@ -69,10 +79,13 @@ export default function Dashboard() {
   }, [currentYM.year, currentYM.month]);
 
   const fetchSavings = useCallback(async () => {
+    setSavingsLoading(true);
+    setSavings(null); // Clear stale data immediately
     try {
       const res = await fetch(`/api/savings?year=${currentYM.year}&month=${currentYM.month}`);
       if (res.ok) setSavings(await res.json());
     } catch { /* silent */ }
+    setSavingsLoading(false);
   }, [currentYM.year, currentYM.month]);
 
   useEffect(() => {
@@ -128,7 +141,7 @@ export default function Dashboard() {
 
     const startDate = new Date(cycleData.cycle.start_date + 'T00:00:00');
     const endDate = new Date(cycleData.cycle.end_date + 'T00:00:00');
-    const newSummary = calculateCycleSummary(updatedEntries, startDate, endDate, cycleData.config);
+    const newSummary = calculateCycleSummary(updatedEntries, startDate, endDate, cycleData.config, cycleData.summary.other_expenses);
 
     setCycleData({ ...cycleData, entries: updatedEntries, summary: newSummary });
 
@@ -137,16 +150,115 @@ export default function Dashboard() {
     const newFilledVar = updatedEntries.filter(e => e.actual_amount !== null && e.variance !== null).reduce((s, e) => s + (e.variance ?? 0), 0);
     const varianceDiff = newFilledVar - oldFilledVar;
     const prevSavings = savings;
-    setSavings(prev => ({
+    setSavings(prev => prev ? ({
       ...prev,
       current_month_variance: prev.current_month_variance + varianceDiff,
       current_balance: prev.current_balance + varianceDiff,
-    }));
+    }) : null);
 
     try {
       const res = await fetch(`/api/daily-logs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       if (!res.ok) { setCycleData(prevData); setSavings(prevSavings); showToast('Gagal update', 'error'); }
     } catch { setCycleData(prevData); setSavings(prevSavings); showToast('Gagal update', 'error'); }
+  };
+
+  const handleUpdateOtherExpense = async (id: number | null, data: Partial<OtherExpense>) => {
+    if (!cycleData) return;
+
+    let updatedExpenses: OtherExpense[];
+    let tempExp: OtherExpense | null = null;
+
+    if (id === null) {
+      // Add (Optimistic) — prepend with temp random ID
+      tempExp = {
+        id: Math.random(),
+        cycle_id: cycleData.cycle.id,
+        category: data.category as 'parking' | 'gas',
+        amount: data.amount || 0,
+        expense_date: data.expense_date || new Date().toISOString().split('T')[0],
+        description: data.description || null,
+      };
+      updatedExpenses = [tempExp, ...otherExpenses];
+    } else {
+      // Edit (Optimistic)
+      updatedExpenses = otherExpenses.map(e => e.id === id ? { ...e, ...data } : e);
+    }
+
+    const prevExpenses = otherExpenses;
+    setOtherExpenses(updatedExpenses);
+
+    // Recalculate summary based on new otherExpenses
+    const startDate = new Date(cycleData.cycle.start_date + 'T00:00:00');
+    const endDate = new Date(cycleData.cycle.end_date + 'T00:00:00');
+    const newSummary = calculateCycleSummary(cycleData.entries, startDate, endDate, cycleData.config, updatedExpenses);
+    setCycleData(prev => prev ? { ...prev, summary: newSummary } : null);
+
+
+    try {
+      const url = id ? `/api/other-expenses/${id}` : '/api/other-expenses';
+      const method = id ? 'PATCH' : 'POST';
+      const body = id ? data : { ...data, cycle_id: cycleData.cycle.id };
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        setOtherExpenses(prevExpenses);
+        // Rollback summary as well
+        setCycleData(prev => prev ? { ...prev, summary: calculateCycleSummary(prev.entries, startDate, endDate, prev.config, prevExpenses) } : null);
+        showToast('Gagal simpan pengeluaran', 'error');
+      } else if (!id && tempExp) {
+        // Replace temp ID with real ID from server
+        const savedExp = await res.json();
+        const tempId = tempExp.id;
+        setOtherExpenses(prev => {
+          const finalExpenses = prev.map(e => e.id === tempId ? savedExp : e);
+          // Update summary with the final expenses
+          setCycleData(prevCycle => prevCycle ? { ...prevCycle, summary: calculateCycleSummary(prevCycle.entries, startDate, endDate, prevCycle.config, finalExpenses) } : null);
+          return finalExpenses;
+        });
+      }
+    } catch {
+      setOtherExpenses(prevExpenses);
+      // Rollback summary as well
+      const startDate = new Date(cycleData.cycle.start_date + 'T00:00:00');
+      const endDate = new Date(cycleData.cycle.end_date + 'T00:00:00');
+      setCycleData(prev => prev ? { ...prev, summary: calculateCycleSummary(prev.entries, startDate, endDate, prev.config, prevExpenses) } : null);
+      showToast('Gagal simpan pengeluaran', 'error');
+    }
+  };
+
+  const handleDeleteOtherExpense = async (id: number) => {
+    if (!cycleData) return;
+    const prevExpenses = otherExpenses;
+    const updatedExpenses = prevExpenses.filter(e => e.id !== id);
+    setOtherExpenses(updatedExpenses);
+
+    // Recalculate summary based on new otherExpenses
+    const startDate = new Date(cycleData.cycle.start_date + 'T00:00:00');
+    const endDate = new Date(cycleData.cycle.end_date + 'T00:00:00');
+    const newSummary = calculateCycleSummary(cycleData.entries, startDate, endDate, cycleData.config, updatedExpenses);
+    setCycleData(prev => prev ? { ...prev, summary: newSummary } : null);
+
+    try {
+      const res = await fetch(`/api/other-expenses/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setOtherExpenses(prevExpenses);
+        // Rollback summary as well
+        setCycleData(prev => prev ? { ...prev, summary: calculateCycleSummary(prev.entries, startDate, endDate, prev.config, prevExpenses) } : null);
+        showToast('Gagal hapus pengeluaran', 'error');
+      }
+    } catch {
+      setOtherExpenses(prevExpenses);
+      // Rollback summary as well
+      const startDate = new Date(cycleData.cycle.start_date + 'T00:00:00');
+      const endDate = new Date(cycleData.cycle.end_date + 'T00:00:00');
+      setCycleData(prev => prev ? { ...prev, summary: calculateCycleSummary(prev.entries, startDate, endDate, prev.config, prevExpenses) } : null);
+      showToast('Gagal hapus pengeluaran', 'error');
+    }
   };
 
   const handleDeleteCycle = async () => {
@@ -179,6 +291,14 @@ export default function Dashboard() {
 
   const goPrev = () => { if (!loading) setCurrentYM(getPrevCycleYearMonth(currentYM.year, currentYM.month)); };
   const goNext = () => { if (canNext && !loading) setCurrentYM(getNextCycleYearMonth(currentYM.year, currentYM.month)); };
+
+  if (!mounted) {
+    return (
+      <div className="loading-container">
+        <div className="spinner" />
+      </div>
+    );
+  }
 
   if (showSettings) {
     return <SettingsPage onBack={() => { setShowSettings(false); fetchCycle(); fetchSavings(); fetchConfigVersions(); }} />;
@@ -229,11 +349,19 @@ export default function Dashboard() {
 
             <SummaryCards summary={cycleData.summary} />
             <DailyLogList entries={cycleData.entries} todayDate={todayStr} onUpdate={handleUpdateLog} />
-            <AdditionalExpenses summary={cycleData.summary} />
             <SavingsDisplay
-              balanceAtMonthStart={savings.balance_at_month_start}
-              currentMonthVariance={savings.current_month_variance}
-              currentBalance={savings.current_balance}
+              balanceAtMonthStart={savings?.balance_at_month_start ?? 0}
+              cycleBudget={cycleData.summary.budget_sum}
+              cycleActual={cycleData.summary.actual_sum}
+              isLoading={savingsLoading}
+            />
+
+            <AdditionalExpenses
+              summary={cycleData.summary}
+              expenses={otherExpenses}
+              cycleId={cycleData.cycle.id}
+              onUpdateExpense={handleUpdateOtherExpense}
+              onDeleteExpense={handleDeleteOtherExpense}
             />
 
             <button className="btn btn-danger" onClick={handleDeleteCycle} style={{ width: '100%', marginTop: 8 }}>

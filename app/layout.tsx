@@ -25,6 +25,19 @@ export default function RootLayout({
         <div className="app-shell">
           {children}
         </div>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                  for (let registration of registrations) {
+                    registration.unregister();
+                  }
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

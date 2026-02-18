@@ -45,6 +45,19 @@ export interface CycleSummary {
     parking_budget: number;
     gas_days: number;
     gas_budget: number;
+    other_expenses: OtherExpense[];
+}
+
+export interface OtherExpense {
+    id: number;
+    cycle_id: number;
+    category: 'parking' | 'gas';
+    amount: number;
+    expense_date: string;
+    description: string | null;
+    created_at?: string;
+    updated_at?: string;
+    [key: string]: unknown;
 }
 
 const DAY_NAMES_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -199,7 +212,8 @@ export function calculateCycleSummary(
     entries: DayEntry[],
     startDate: Date,
     endDate: Date,
-    config: Config
+    config: Config,
+    otherExpenses: OtherExpense[] = []
 ): CycleSummary {
     let budget_sum = 0;
     let actual_sum = 0;
@@ -233,6 +247,7 @@ export function calculateCycleSummary(
         parking_budget,
         gas_days,
         gas_budget,
+        other_expenses: otherExpenses,
     };
 }
 

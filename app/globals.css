@@ -603,6 +603,73 @@ textarea {
   left: 25px;
 }
 
+/* Mini Toggle for inline use */
+.toggle-mini {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border);
+  cursor: pointer;
+  transition: var(--transition);
+  border: none;
+  padding: 0;
+}
+
+.toggle-mini.active {
+  background: var(--green);
+}
+
+.toggle-mini::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transition: var(--transition);
+}
+
+.toggle-mini.active::after {
+  left: 16px;
+}
+
+.sheet-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.spent-zero-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.spent-zero-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.toggle-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+
+.toggle-label.active {
+  color: var(--green);
+}
+
 /* ====== CUSTOM SETTINGS SECTION ====== */
 .sheet-custom-section {
   background: rgba(255, 255, 255, 0.02);

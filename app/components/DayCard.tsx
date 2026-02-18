@@ -12,7 +12,7 @@ interface DayCardProps {
 
 export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
     const [showSheet, setShowSheet] = useState(false);
-    const [editValue, setEditValue] = useState(entry.actual_amount ?? 0);
+    const [editValue, setEditValue] = useState<number | null>(entry.actual_amount);
 
     // Check if entry has custom settings
     const hasCustom = (entry.custom_label && entry.custom_label.trim() !== '') || (entry.custom_budget !== null && entry.custom_budget !== undefined);
@@ -23,7 +23,7 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
     const dateNum = new Date(entry.log_date + 'T00:00:00').getDate();
 
     const handleOpen = () => {
-        setEditValue(entry.actual_amount ?? 0);
+        setEditValue(entry.actual_amount);
         const hasCustom = (entry.custom_label && entry.custom_label.trim() !== '') || (entry.custom_budget !== null && entry.custom_budget !== undefined);
         setUseCustom(hasCustom);
         setCustomLabel(entry.custom_label || '');
@@ -32,7 +32,7 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
     };
 
     const handleSave = () => {
-        const amount = editValue === 0 ? null : editValue;
+        const amount = editValue;
 
         // Only save custom values if toggle is ON
         if (useCustom) {
@@ -58,9 +58,17 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
         setShowSheet(false);
     };
 
+    const handleSpentZeroToggle = () => {
+        if (editValue === 0) {
+            setEditValue(null);
+        } else {
+            setEditValue(0);
+        }
+    };
+
     const handleClear = () => {
         onUpdate(entry.id, { actual_amount: null });
-        setEditValue(0);
+        setEditValue(null);
         setShowSheet(false);
     };
 
@@ -84,8 +92,8 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
                 <div className="day-middle">
                     {entry.detail && (
                         <span className={`day-detail ${entry.detail === 'WFO' ? 'wfo-badge'
-                                : entry.detail === 'Carbo Loading' ? 'carbo-badge'
-                                    : 'custom-badge'
+                            : entry.detail === 'Carbo Loading' ? 'carbo-badge'
+                                : 'custom-badge'
                             }`}>
                             {entry.detail === 'WFO' ? '🏢 WFO'
                                 : entry.detail === 'Carbo Loading' ? '🍝 Carbo'
@@ -167,7 +175,7 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
                                         <RupiahInput
                                             className="sheet-input"
                                             value={customBudget}
-                                            onChange={setCustomBudget}
+                                            onChange={(val) => setCustomBudget(val ?? 0)}
                                             placeholder="Rp 0"
                                         />
                                     </div>
@@ -180,20 +188,43 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
                         </div>
 
                         {/* Pengeluaran */}
-                        <div className="sheet-input-group">
-                            <label className="sheet-label">Pengeluaran Hari Ini</label>
+                        <div className="sheet-input-group" style={{ border: '1px solid var(--border)', padding: '12px', borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+                            <div className="sheet-input-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                <label className="sheet-label" style={{ margin: 0 }}>Pengeluaran Hari Ini</label>
+                                <div
+                                    className="spent-zero-toggle"
+                                    onClick={() => {
+                                        const newValue = editValue === 0 ? null : 0;
+                                        console.log('Toggle Rp 0 clicked. Old:', editValue, 'New:', newValue);
+                                        setEditValue(newValue);
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: editValue === 0 ? 'var(--green-dim)' : 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '20px', border: `1px solid ${editValue === 0 ? 'var(--green)' : 'var(--border)'}`, transition: 'all 0.2s' }}
+                                >
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: editValue === 0 ? 'var(--green)' : 'var(--text-muted)' }}>Set Rp 0</span>
+                                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: editValue === 0 ? 'var(--green)' : 'var(--border)' }} />
+                                </div>
+                            </div>
                             <RupiahInput
                                 className="sheet-input"
                                 value={editValue}
-                                onChange={setEditValue}
+                                onChange={(val) => {
+                                    console.log('RupiahInput onChange:', val);
+                                    setEditValue(val);
+                                }}
                                 onEnter={handleSave}
                                 autoFocus
                             />
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                                {editValue === null ? '💡 Belum diisi (Tap icon atau ketik 0)' : editValue === 0 ? '✅ Tercatat Rp 0 (Hemat!)' : `📝 Tercatat ${formatRupiah(editValue)}`}
+                            </p>
                         </div>
 
                         <div className="sheet-actions">
                             <button className="btn btn-ghost" onClick={() => setShowSheet(false)}>Batal</button>
-                            <button className="btn btn-primary" onClick={handleSave}>Simpan</button>
+                            <button className="btn btn-primary" onClick={() => {
+                                console.log('Saving amount:', editValue);
+                                handleSave();
+                            }}>Simpan</button>
                         </div>
 
                         {entry.actual_amount !== null && (
