@@ -18,6 +18,12 @@ interface CycleData {
   entries: DayEntry[];
   summary: CycleSummary;
   config: ConfigVersion;
+  configVersions?: ConfigVersion[];
+  savings?: {
+    balance_at_month_start: number;
+    current_month_variance: number;
+    current_balance: number;
+  };
 }
 
 export default function Dashboard() {
@@ -32,12 +38,7 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const initialScrollDone = useRef(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const currentCycle = getCurrentCycleYearMonth();
   const maxYM = getNextCycleYearMonth(currentCycle.year, currentCycle.month);
@@ -50,15 +51,9 @@ export default function Dashboard() {
 
   const todayStr = dateToString(new Date());
 
-  const fetchConfigVersions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/config-versions');
-      if (res.ok) setConfigVersions(await res.json());
-    } catch { /* silent */ }
-  }, []);
-
   const fetchCycle = useCallback(async () => {
     setLoading(true);
+    setSavingsLoading(true);
     setNotFound(false);
     initialScrollDone.current = false;
     try {
@@ -67,14 +62,19 @@ export default function Dashboard() {
         setNotFound(true);
         setCycleData(null);
         setOtherExpenses([]);
+        setConfigVersions([]);
+        setSavings(null);
       } else if (res.ok) {
         const data = await res.json();
         setCycleData(data);
         setOtherExpenses(data.summary?.other_expenses ?? []);
+        setConfigVersions(data.configVersions ?? []);
+        setSavings(data.savings ?? null);
       }
     } catch {
       showToast('Gagal ambil data', 'error');
     }
+    setSavingsLoading(false);
     setLoading(false);
   }, [currentYM.year, currentYM.month]);
 
@@ -89,10 +89,10 @@ export default function Dashboard() {
   }, [currentYM.year, currentYM.month]);
 
   useEffect(() => {
-    fetchCycle();
-    fetchSavings();
-    fetchConfigVersions();
-  }, [fetchCycle, fetchSavings, fetchConfigVersions]);
+    void Promise.resolve().then(() => {
+      fetchCycle();
+    });
+  }, [fetchCycle]);
 
   useEffect(() => {
     if (cycleData && !initialScrollDone.current) {
@@ -281,7 +281,6 @@ export default function Dashboard() {
       });
       if (res.ok) {
         await fetchCycle();
-        await fetchSavings();
         showToast('Config version diubah');
       } else {
         showToast('Gagal mengubah config', 'error');
@@ -292,16 +291,8 @@ export default function Dashboard() {
   const goPrev = () => { if (!loading) setCurrentYM(getPrevCycleYearMonth(currentYM.year, currentYM.month)); };
   const goNext = () => { if (canNext && !loading) setCurrentYM(getNextCycleYearMonth(currentYM.year, currentYM.month)); };
 
-  if (!mounted) {
-    return (
-      <div className="loading-container">
-        <div className="spinner" />
-      </div>
-    );
-  }
-
   if (showSettings) {
-    return <SettingsPage onBack={() => { setShowSettings(false); fetchCycle(); fetchSavings(); fetchConfigVersions(); }} />;
+    return <SettingsPage onBack={() => { setShowSettings(false); fetchCycle(); }} />;
   }
 
   return (
@@ -399,7 +390,9 @@ function SettingsPage({ onBack }: { onBack: () => void }) {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    void Promise.resolve().then(fetchData);
+  }, []);
 
   const handleSaveVersion = async (version: ConfigVersion) => {
     try {

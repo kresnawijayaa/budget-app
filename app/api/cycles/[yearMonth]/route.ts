@@ -2,6 +2,31 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { ConfigVersion, DailyLog, toDayEntry, calculateCycleSummary, OtherExpense } from '@/lib/budget-utils';
 
+interface CycleRow {
+    id: number;
+    year: number;
+    month: number;
+    start_date: string;
+    end_date: string;
+    config_version_id: number | null;
+    [key: string]: unknown;
+}
+
+interface CyclePayloadRow {
+    cycle: CycleRow;
+    config: ConfigVersion;
+    config_versions: ConfigVersion[] | null;
+    daily_logs: DailyLog[] | null;
+    other_expenses: OtherExpense[] | null;
+    savings: {
+        total_balance: number;
+        balance_at_month_start: number;
+        current_month_variance: number;
+        current_balance: number;
+    } | null;
+    [key: string]: unknown;
+}
+
 export async function GET(
     _request: Request,
     { params }: { params: Promise<{ yearMonth: string }> }
@@ -16,9 +41,83 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid yearMonth format. Use YYYY-MM' }, { status: 400 });
         }
 
-        // Get cycle
-        const cycleResult = await query(
-            'SELECT * FROM cycles WHERE year = $1 AND month = $2',
+        const cycleResult = await query<CyclePayloadRow>(
+            `
+            WITH selected_cycle AS (
+                SELECT *
+                FROM cycles
+                WHERE year = $1 AND month = $2
+            ),
+            latest_config AS (
+                SELECT id
+                FROM config_versions
+                ORDER BY id DESC
+                LIMIT 1
+            ),
+            cycle_variances AS (
+                SELECT
+                    c.year,
+                    c.month,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN dl.actual_amount IS NULL THEN 0
+                            ELSE (
+                                CASE
+                                    WHEN dl.custom_budget IS NOT NULL THEN dl.custom_budget
+                                    WHEN dl.is_wfo THEN 0
+                                    WHEN EXTRACT(DOW FROM dl.log_date) = 5 THEN cv_for_sum.carbo_loading_budget
+                                    WHEN EXTRACT(DOW FROM dl.log_date) IN (0, 6) THEN cv_for_sum.weekend_budget
+                                    ELSE cv_for_sum.weekday_budget
+                                END
+                            ) - dl.actual_amount
+                        END
+                    ), 0)::int AS variance
+                FROM cycles c
+                LEFT JOIN latest_config lc ON TRUE
+                JOIN config_versions cv_for_sum ON cv_for_sum.id = COALESCE(c.config_version_id, lc.id)
+                LEFT JOIN daily_logs dl ON dl.cycle_id = c.id
+                GROUP BY c.id, c.year, c.month
+            ),
+            savings_summary AS (
+                SELECT
+                    COALESCE((SELECT initial_savings FROM config WHERE id = 1), 0)::int AS initial_savings,
+                    COALESCE(SUM(variance), 0)::int AS total_variance,
+                    COALESCE(SUM(variance) FILTER (
+                        WHERE year < $1 OR (year = $1 AND month < $2)
+                    ), 0)::int AS variance_before_current_month,
+                    COALESCE(SUM(variance) FILTER (
+                        WHERE year = $1 AND month = $2
+                    ), 0)::int AS current_month_variance
+                FROM cycle_variances
+            )
+            SELECT
+                to_jsonb(c) AS cycle,
+                to_jsonb(cv) AS config,
+                jsonb_build_object(
+                    'total_balance', ss.initial_savings + ss.total_variance,
+                    'balance_at_month_start', ss.initial_savings + ss.variance_before_current_month,
+                    'current_month_variance', ss.current_month_variance,
+                    'current_balance', ss.initial_savings + ss.variance_before_current_month + ss.current_month_variance
+                ) AS savings,
+                COALESCE((
+                    SELECT jsonb_agg(to_jsonb(all_cv) ORDER BY all_cv.id ASC)
+                    FROM config_versions all_cv
+                ), '[]'::jsonb) AS config_versions,
+                COALESCE((
+                    SELECT jsonb_agg(to_jsonb(dl) ORDER BY dl.log_date ASC)
+                    FROM daily_logs dl
+                    WHERE dl.cycle_id = c.id
+                ), '[]'::jsonb) AS daily_logs,
+                COALESCE((
+                    SELECT jsonb_agg(to_jsonb(oe) ORDER BY oe.expense_date DESC, oe.id DESC)
+                    FROM other_expenses oe
+                    WHERE oe.cycle_id = c.id
+                ), '[]'::jsonb) AS other_expenses
+            FROM selected_cycle c
+            LEFT JOIN latest_config lc ON TRUE
+            JOIN config_versions cv ON cv.id = COALESCE(c.config_version_id, lc.id)
+            CROSS JOIN savings_summary ss
+            `,
             [year, month]
         );
 
@@ -26,34 +125,14 @@ export async function GET(
             return NextResponse.json({ error: 'Cycle not found', year, month }, { status: 404 });
         }
 
-        const cycle = cycleResult.rows[0] as { id: number; year: number; month: number; start_date: string; end_date: string; config_version_id: number | null };
-
-        // Get config version for this cycle
-        let config: ConfigVersion;
-        if (cycle.config_version_id) {
-            const cvResult = await query<ConfigVersion>('SELECT * FROM config_versions WHERE id = $1', [cycle.config_version_id]);
-            config = cvResult.rows[0];
-        } else {
-            // Fallback to latest version
-            const cvResult = await query<ConfigVersion>('SELECT * FROM config_versions ORDER BY id DESC LIMIT 1');
-            config = cvResult.rows[0];
-        }
-
-        // Get daily logs
-        const logsResult = await query<DailyLog>(
-            'SELECT * FROM daily_logs WHERE cycle_id = $1 ORDER BY log_date ASC',
-            [cycle.id]
-        );
+        const { cycle, config } = cycleResult.rows[0];
+        const savings = cycleResult.rows[0].savings;
+        const configVersions = cycleResult.rows[0].config_versions ?? [];
+        const dailyLogs = cycleResult.rows[0].daily_logs ?? [];
+        const otherExpenses = cycleResult.rows[0].other_expenses ?? [];
 
         // Compute entries with budget info
-        const entries = logsResult.rows.map(log => toDayEntry(log, config));
-
-        // Get other expenses (parking/gas)
-        const otherExpensesResult = await query<OtherExpense>(
-            'SELECT * FROM other_expenses WHERE cycle_id = $1 ORDER BY expense_date DESC, id DESC',
-            [cycle.id]
-        );
-        const otherExpenses = otherExpensesResult.rows;
+        const entries = dailyLogs.map(log => toDayEntry(log, config));
 
         // Compute summary
         const startDate = new Date(cycle.start_date + 'T00:00:00');
@@ -65,6 +144,8 @@ export async function GET(
             entries,
             summary,
             config,
+            configVersions,
+            savings,
         });
     } catch (error) {
         console.error('GET /api/cycles/[yearMonth] error:', error);

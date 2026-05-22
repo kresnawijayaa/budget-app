@@ -58,14 +58,6 @@ export default function DayCard({ entry, isToday, onUpdate }: DayCardProps) {
         setShowSheet(false);
     };
 
-    const handleSpentZeroToggle = () => {
-        if (editValue === 0) {
-            setEditValue(null);
-        } else {
-            setEditValue(0);
-        }
-    };
-
     const handleClear = () => {
         onUpdate(entry.id, { actual_amount: null });
         setEditValue(null);
