@@ -1,5 +1,7 @@
 SET search_path TO budget_app;
 
+-- Historical migration only. Fresh databases should use schema.sql.
+
 -- 1. Create config_versions table
 CREATE TABLE IF NOT EXISTS config_versions (
   id SERIAL PRIMARY KEY,

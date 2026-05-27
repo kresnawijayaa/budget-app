@@ -1,5 +1,7 @@
 SET search_path TO budget_app;
 
+-- Historical migration only. Fresh databases should use schema.sql.
+
 -- Create other_expenses table for tracking parking and gas
 CREATE TABLE IF NOT EXISTS other_expenses (
   id SERIAL PRIMARY KEY,

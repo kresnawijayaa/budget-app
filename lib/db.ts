@@ -1,4 +1,4 @@
-import { Pool, QueryResult, types } from 'pg';
+import { Pool, PoolClient, QueryResult, types } from 'pg';
 
 // Override pg's DATE parser to return plain strings (YYYY-MM-DD)
 // instead of JS Date objects, avoiding timezone conversion issues
@@ -29,6 +29,26 @@ export async function query<T extends Record<string, unknown> = Record<string, u
     await client.query(`SET search_path TO ${schema}`);
     const result = await client.query<T>(text, params);
     return result;
+  } finally {
+    client.release();
+  }
+}
+
+export type TransactionClient = Pick<PoolClient, 'query'>;
+
+export async function transaction<T>(
+  callback: (client: TransactionClient) => Promise<T>
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query(`SET search_path TO ${schema}`);
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
   } finally {
     client.release();
   }

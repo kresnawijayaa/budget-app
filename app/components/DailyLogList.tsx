@@ -1,12 +1,14 @@
 'use client';
 
+import { useMemo } from 'react';
 import { DayEntry } from '@/lib/budget-utils';
+import { LogUpdate } from '@/lib/app-types';
 import DayCard from './DayCard';
 
 interface DailyLogListProps {
     entries: DayEntry[];
     todayDate: string;
-    onUpdate: (id: number, data: { actual_amount?: number | null; is_wfo?: boolean }) => void;
+    onUpdate: (id: number, data: LogUpdate) => void;
 }
 
 interface WeekGroup {
@@ -39,7 +41,7 @@ function groupByWeek(entries: DayEntry[]): WeekGroup[] {
 }
 
 export default function DailyLogList({ entries, todayDate, onUpdate }: DailyLogListProps) {
-    const weeks = groupByWeek(entries);
+    const weeks = useMemo(() => groupByWeek(entries), [entries]);
 
     return (
         <div>

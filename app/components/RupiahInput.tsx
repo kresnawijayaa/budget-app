@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface RupiahInputProps {
+    id?: string;
     value: number | null;
     onChange: (value: number | null) => void;
     onEnter?: () => void;
@@ -28,7 +29,7 @@ function parseFromFormatted(str: string): number | null {
     return parseInt(digits, 10);
 }
 
-export default function RupiahInput({ value, onChange, onEnter, placeholder = '0', className = '', autoFocus = false }: RupiahInputProps) {
+export default function RupiahInput({ id, value, onChange, onEnter, placeholder = '0', className = '', autoFocus = false }: RupiahInputProps) {
     const [displayValue, setDisplayValue] = useState(formatWithDots(value));
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +63,7 @@ export default function RupiahInput({ value, onChange, onEnter, placeholder = '0
 
     return (
         <input
+            id={id}
             ref={inputRef}
             className={className}
             type="text"

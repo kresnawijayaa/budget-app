@@ -1,36 +1,52 @@
 'use client';
 
 import { useState } from 'react';
-import { formatRupiah, CycleSummary, OtherExpense } from '@/lib/budget-utils';
+import { OperationalCashSnapshot } from '@/lib/app-types';
+import { formatRupiah, CycleSummary, OtherExpense, dateToString } from '@/lib/budget-utils';
+import ModalSheet from './ModalSheet';
 import RupiahInput from './RupiahInput';
 
 interface AdditionalExpensesProps {
     summary: CycleSummary;
     expenses: OtherExpense[];
+    operationalCash: OperationalCashSnapshot | null;
     cycleId: number;
     onUpdateExpense: (id: number | null, data: Partial<OtherExpense>) => void;
     onDeleteExpense: (id: number) => void;
 }
 
-export default function AdditionalExpenses({ summary, expenses, cycleId, onUpdateExpense, onDeleteExpense }: AdditionalExpensesProps) {
+export default function AdditionalExpenses({
+    summary,
+    expenses,
+    operationalCash,
+    cycleId,
+    onUpdateExpense,
+    onDeleteExpense,
+}: AdditionalExpensesProps) {
     const [showModal, setShowModal] = useState(false);
+    const [showLogs, setShowLogs] = useState(false);
     const [modalCategory, setModalCategory] = useState<'parking' | 'gas'>('parking');
     const [editId, setEditId] = useState<number | null>(null);
     const [amount, setAmount] = useState<number | null>(0);
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(dateToString(new Date()));
     const [description, setDescription] = useState('');
 
-    const parkingExpenses = expenses.filter(e => e.category === 'parking');
-    const gasExpenses = expenses.filter(e => e.category === 'gas');
-
-    const totalParkingActual = parkingExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const totalGasActual = gasExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const parkingExpenses = expenses.filter(expense => expense.category === 'parking');
+    const gasExpenses = expenses.filter(expense => expense.category === 'gas');
+    const totalParkingActual = parkingExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const totalGasActual = gasExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const totalActual = totalParkingActual + totalGasActual;
+    const totalBudget = summary.parking_budget + summary.gas_budget;
+    const variance = totalBudget - totalActual;
+    const balanceAtMonthStart = operationalCash?.balance_at_month_start ?? 0;
+    const currentBalance = balanceAtMonthStart + variance;
+    const modalTitleId = 'operational-expense-title';
 
     const openAdd = (category: 'parking' | 'gas') => {
         setModalCategory(category);
         setEditId(null);
         setAmount(category === 'parking' ? 5000 : 50000);
-        setDate(new Date().toISOString().split('T')[0]);
+        setDate(dateToString(new Date()));
         setDescription('');
         setShowModal(true);
     };
@@ -49,9 +65,9 @@ export default function AdditionalExpenses({ summary, expenses, cycleId, onUpdat
         onUpdateExpense(editId, {
             cycle_id: cycleId,
             category: modalCategory,
-            amount: amount,
+            amount,
             expense_date: date,
-            description: description
+            description,
         });
         setShowModal(false);
     };
@@ -61,166 +77,157 @@ export default function AdditionalExpenses({ summary, expenses, cycleId, onUpdat
         onDeleteExpense(id);
     };
 
+    const renderExpenseList = (items: OtherExpense[], fallbackDescription: string) => (
+        items.length > 0 && (
+            <div className="expense-list compact-expense-list">
+                {items.map(expense => {
+                    const expenseDate = new Date(expense.expense_date + 'T00:00:00');
+                    return (
+                        <div key={expense.id} className="expense-item compact-expense-item">
+                            <button className="expense-edit-btn compact-expense-edit" onClick={() => openEdit(expense)}>
+                                <span className="expense-date">{expenseDate.getDate()}/{expenseDate.getMonth() + 1}</span>
+                                <span>{expense.description || fallbackDescription}</span>
+                            </button>
+                            <div className="expense-item-actions">
+                                <span className="expense-amount">{formatRupiah(expense.amount)}</span>
+                                <button
+                                    className="expense-delete-btn compact-delete-btn"
+                                    onClick={() => handleDelete(expense.id)}
+                                    aria-label={`Hapus ${expense.description || fallbackDescription}`}
+                                >
+                                    x
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        )
+    );
+
     return (
         <div className="expenses-section">
-            <div className="expenses-title">🎯 Tracking Operasional</div>
-
-            {/* PARKING */}
-            <div className="category-block" style={{ marginBottom: '24px' }}>
-                <div className="category-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <div className="expense-info">
-                        <span className="expense-icon">🅿️</span>
-                        <div>
-                            <div className="expense-label" style={{ fontWeight: '700' }}>Parkir</div>
-                            <div className="expense-days">Budget: {formatRupiah(summary.parking_budget)}</div>
-                        </div>
-                    </div>
-                    <button className="btn-mini" onClick={() => openAdd('parking')}>+ Tambah</button>
+            <div className="operational-header">
+                <div>
+                    <div className="expenses-title no-margin">Tracking Operasional</div>
+                    <div className="operational-balance-label">Cash sekarang</div>
+                    <div className="operational-balance">{formatRupiah(currentBalance)}</div>
                 </div>
-
-                {parkingExpenses.length > 0 && (
-                    <div className="expense-list" style={{ marginBottom: '8px' }}>
-                        {parkingExpenses.map(e => (
-                            <div key={e.id} className="expense-item" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                <div onClick={() => openEdit(e)} style={{ cursor: 'pointer' }}>
-                                    <span style={{ color: 'var(--text-muted)', marginRight: '8px' }}>{new Date(e.expense_date).getDate()} Rab</span>
-                                    <span>{e.description || 'P' + new Date(e.expense_date).getDate()}</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontWeight: '600' }}>{formatRupiah(e.amount)}</span>
-                                    <button onClick={() => handleDelete(e.id)} style={{ background: 'none', border: 'none', opacity: 0.3 }}>✕</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="category-footer" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Sisa Budget:</span>
-                    <span style={{ fontWeight: '700', color: (summary.parking_budget - totalParkingActual) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                        {formatRupiah(summary.parking_budget - totalParkingActual)}
-                    </span>
+                <div className="operational-actions">
+                    <button className="btn-mini" onClick={() => openAdd('parking')}>+ Parkir</button>
+                    <button className="btn-mini" onClick={() => openAdd('gas')}>+ Bensin</button>
                 </div>
             </div>
 
-            {/* GAS */}
-            <div className="category-block">
-                <div className="category-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <div className="expense-info">
-                        <span className="expense-icon">⛽</span>
-                        <div>
-                            <div className="expense-label" style={{ fontWeight: '700' }}>Bensin</div>
-                            <div className="expense-days">Budget: {formatRupiah(summary.gas_budget)}</div>
-                        </div>
-                    </div>
-                    <button className="btn-mini" onClick={() => openAdd('gas')}>+ Tambah</button>
+            <div className="operational-metrics" aria-label="Ringkasan saldo cash operasional">
+                <div>
+                    <span>Saldo awal bulan</span>
+                    <strong>{formatRupiah(balanceAtMonthStart)}</strong>
                 </div>
+                <div>
+                    <span>Total pengeluaran</span>
+                    <strong className="negative">-{formatRupiah(totalActual)}</strong>
+                </div>
+                <div>
+                    <span>Budget bulan ini</span>
+                    <strong>{formatRupiah(totalBudget)}</strong>
+                </div>
+                <div>
+                    <span>Sisa budget</span>
+                    <strong className={variance >= 0 ? 'positive' : 'negative'}>{formatRupiah(variance)}</strong>
+                </div>
+            </div>
 
-                {gasExpenses.length > 0 && (
-                    <div className="expense-list" style={{ marginBottom: '8px' }}>
-                        {gasExpenses.map(e => (
-                            <div key={e.id} className="expense-item" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                <div onClick={() => openEdit(e)} style={{ cursor: 'pointer' }}>
-                                    <span style={{ color: 'var(--text-muted)', marginRight: '8px' }}>{new Date(e.expense_date).getDate()}/{new Date(e.expense_date).getMonth() + 1}</span>
-                                    <span>{e.description || 'Isi Bensin'}</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontWeight: '600' }}>{formatRupiah(e.amount)}</span>
-                                    <button onClick={() => handleDelete(e.id)} style={{ background: 'none', border: 'none', opacity: 0.3 }}>✕</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="category-footer" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Sisa Budget:</span>
-                    <span style={{ fontWeight: '700', color: (summary.gas_budget - totalGasActual) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            <div className="operational-category-grid">
+                <div className="operational-category">
+                    <span className="expense-icon">P</span>
+                    <span>
+                        <span className="expense-label strong">Parkir</span>
+                        <span className="expense-days">{formatRupiah(totalParkingActual)} / {formatRupiah(summary.parking_budget)}</span>
+                    </span>
+                    <span className={(summary.parking_budget - totalParkingActual) >= 0 ? 'positive' : 'negative'}>
+                        {formatRupiah(summary.parking_budget - totalParkingActual)}
+                    </span>
+                </div>
+                <div className="operational-category">
+                    <span className="expense-icon">B</span>
+                    <span>
+                        <span className="expense-label strong">Bensin</span>
+                        <span className="expense-days">{formatRupiah(totalGasActual)} / {formatRupiah(summary.gas_budget)}</span>
+                    </span>
+                    <span className={(summary.gas_budget - totalGasActual) >= 0 ? 'positive' : 'negative'}>
                         {formatRupiah(summary.gas_budget - totalGasActual)}
                     </span>
                 </div>
             </div>
 
-            {showModal && (
-                <div className="modal-overlay" onClick={() => setShowModal(false)} style={{ zIndex: 1000 }}>
-                    <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
-                        <div className="sheet-handle" />
-                        <div className="sheet-title">{editId ? 'Edit' : 'Tambah'} {modalCategory === 'parking' ? 'Parkir' : 'Bensin'}</div>
+            {expenses.length > 0 && (
+                <div className="operational-log">
+                    <button
+                        className="operational-log-toggle"
+                        onClick={() => setShowLogs(value => !value)}
+                        aria-expanded={showLogs}
+                    >
+                        <span>{showLogs ? 'Sembunyikan log' : `Lihat log (${expenses.length})`}</span>
+                        <span aria-hidden="true">{showLogs ? '^' : 'v'}</span>
+                    </button>
+                    {showLogs && (
+                        <div>
+                            {renderExpenseList(parkingExpenses, 'Parkir')}
+                            {renderExpenseList(gasExpenses, 'Isi Bensin')}
+                        </div>
+                    )}
+                </div>
+            )}
 
-                        <div className="sheet-input-group" style={{ marginTop: '16px' }}>
-                            <label className="sheet-label">Jumlah (Rp)</label>
+            {showModal && (
+                <ModalSheet titleId={modalTitleId} onClose={() => setShowModal(false)} className="modal-elevated">
+                    <div className="sheet-title" id={modalTitleId}>
+                        {editId ? 'Edit' : 'Tambah'} {modalCategory === 'parking' ? 'Parkir' : 'Bensin'}
+                    </div>
+
+                    <div className="operational-form-grid with-top-gap">
+                        <div className="sheet-input-group compact-input-group">
+                            <label className="sheet-label" htmlFor="operational-amount">Jumlah</label>
                             <RupiahInput
-                                className="sheet-input"
+                                id="operational-amount"
+                                className="sheet-input compact-input"
                                 value={amount}
                                 onChange={setAmount}
                                 autoFocus
                             />
                         </div>
 
-                        <div className="sheet-input-group">
-                            <label className="sheet-label">Tanggal</label>
+                        <div className="sheet-input-group compact-input-group">
+                            <label className="sheet-label" htmlFor="operational-date">Tanggal</label>
                             <input
+                                id="operational-date"
                                 type="date"
-                                className="sheet-input"
+                                className="sheet-input compact-input"
                                 value={date}
-                                onChange={e => setDate(e.target.value)}
+                                onChange={event => setDate(event.target.value)}
                             />
                         </div>
 
-                        <div className="sheet-input-group">
-                            <label className="sheet-label">Keterangan (Opsional)</label>
+                        <div className="sheet-input-group compact-input-group operational-description-field">
+                            <label className="sheet-label" htmlFor="operational-description">Keterangan</label>
                             <input
+                                id="operational-description"
                                 type="text"
-                                className="sheet-input"
-                                placeholder="Cth: Parkir Mall, Pertamax..."
+                                className="sheet-input compact-input"
+                                placeholder="Opsional"
                                 value={description}
-                                onChange={e => setDescription(e.target.value)}
+                                onChange={event => setDescription(event.target.value)}
                             />
-                        </div>
-
-                        <div className="sheet-actions" style={{ marginTop: '24px' }}>
-                            <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Batal</button>
-                            <button className="btn btn-primary" onClick={handleSave}>
-                                Simpan
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
 
-            <style jsx>{`
-                .category-block {
-                    background: rgba(255, 255, 255, 0.02);
-                    border: 1px solid var(--border);
-                    border-radius: var(--radius-md);
-                    padding: 14px;
-                }
-                .btn-mini {
-                    background: var(--accent);
-                    color: black;
-                    border: none;
-                    padding: 6px 14px;
-                    border-radius: 20px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    box-shadow: 0 2px 10px var(--accent-glow);
-                }
-                .btn-mini:hover {
-                    background: var(--accent-light);
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 15px var(--accent-glow);
-                }
-                .expense-item {
-                    transition: background 0.2s;
-                    border-radius: 4px;
-                    padding: 8px 4px !important;
-                }
-                .expense-item:hover {
-                    background: rgba(255,255,255,0.05);
-                }
-            `}</style>
+                    <div className="sheet-actions loose">
+                        <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Batal</button>
+                        <button className="btn btn-primary" onClick={handleSave}>Simpan</button>
+                    </div>
+                </ModalSheet>
+            )}
         </div>
     );
 }

@@ -12,6 +12,7 @@ export interface ConfigVersion {
 
 export interface AppSettings {
     initial_savings: number;
+    initial_cash: number;
     [key: string]: unknown;
 }
 
@@ -45,6 +46,9 @@ export interface CycleSummary {
     parking_budget: number;
     gas_days: number;
     gas_budget: number;
+    operational_budget: number;
+    operational_actual: number;
+    operational_variance: number;
     other_expenses: OtherExpense[];
 }
 
@@ -238,6 +242,9 @@ export function calculateCycleSummary(
     const gas_budget = config.gas_fill_interval_days > 0
         ? Math.round((gas_days * config.gas_per_fill) / config.gas_fill_interval_days)
         : 0;
+    const operational_budget = parking_budget + gas_budget;
+    const operational_actual = otherExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const operational_variance = operational_budget - operational_actual;
 
     return {
         budget_sum,
@@ -247,6 +254,9 @@ export function calculateCycleSummary(
         parking_budget,
         gas_days,
         gas_budget,
+        operational_budget,
+        operational_actual,
+        operational_variance,
         other_expenses: otherExpenses,
     };
 }
