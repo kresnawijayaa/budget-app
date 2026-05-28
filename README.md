@@ -31,7 +31,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-The app uses a single shared 6-digit PIN. `APP_PASSWORD` is the PIN used on `/login`. The login screen asks for 2 random PIN positions at a time and stores the challenge in an HTTP-only signed cookie. `AUTH_SECRET` signs both the challenge cookie and the session cookie; use a long random value and keep it private.
+The app uses a single shared 6-digit PIN. `APP_PASSWORD` is the PIN used on `/login`. The login screen asks for 2 random PIN positions at a time and stores the challenge in an HTTP-only signed cookie. `AUTH_SECRET` signs both the challenge cookie and the session cookie; use a long random value and keep it private. The session expires after 15 minutes, so the app will ask for login again fairly often.
 
 Login has a small in-memory rate limit. It is enough for a single personal deployment, but use a persistent store such as Redis/Upstash if this app runs on multiple instances.
 

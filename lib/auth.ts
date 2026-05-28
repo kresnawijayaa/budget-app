@@ -1,6 +1,6 @@
 export const SESSION_COOKIE_NAME = 'budget_session';
 export const PIN_CHALLENGE_COOKIE_NAME = 'budget_pin_challenge';
-export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_MAX_AGE_SECONDS = 60 * 15;
 export const PIN_CHALLENGE_MAX_AGE_SECONDS = 60 * 10;
 export const PIN_LENGTH = 6;
 export const PIN_CHALLENGE_DIGITS = 2;
