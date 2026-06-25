@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AppSettings, ConfigVersion } from '@/lib/budget-utils';
+import { AppSettings, ConfigVersion, getCurrentCycleYearMonth, getMonthName } from '@/lib/budget-utils';
 import RupiahInput from './RupiahInput';
 import { useToast } from '../hooks/useToast';
 
@@ -18,12 +18,22 @@ const budgetFields = [
   { label: 'Interval isi (hari)', key: 'gas_fill_interval_days' as const },
 ];
 
+const months = Array.from({ length: 12 }, (_, index) => index + 1);
+const currentCycle = getCurrentCycleYearMonth();
+
+function formatConfigPeriod(version: ConfigVersion): string {
+  if (!version.year || !version.month) return 'Periode belum diisi';
+  return `${getMonthName(version.month)} ${version.year}`;
+}
+
 export default function SettingsPage({ onBack }: SettingsPageProps) {
   const [versions, setVersions] = useState<ConfigVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingVersion, setEditingVersion] = useState<ConfigVersion | null>(null);
   const [settings, setSettings] = useState<AppSettings>({ initial_savings: 0, initial_cash: 0 });
   const [newVersionName, setNewVersionName] = useState('');
+  const [newVersionYear, setNewVersionYear] = useState(currentCycle.year);
+  const [newVersionMonth, setNewVersionMonth] = useState(currentCycle.month);
   const { toast, showToast } = useToast();
 
   const fetchData = useCallback(async () => {
@@ -69,7 +79,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       const res = await fetch('/api/config-versions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newVersionName }),
+        body: JSON.stringify({ name: newVersionName, year: newVersionYear, month: newVersionMonth }),
       });
       if (res.ok) {
         showToast('Versi baru dibuat!');
@@ -165,7 +175,10 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
           {versions.map(version => (
             <div className="version-card" key={version.id}>
               <div className="version-header">
-                <span className="version-name">{version.name}</span>
+                <div className="version-title-block">
+                  <span className="version-name">{version.name}</span>
+                  <span className="version-period">{formatConfigPeriod(version)}</span>
+                </div>
                 <div className="version-actions">
                   <button
                     className="version-action-btn"
@@ -196,6 +209,33 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
                       type="text"
                       value={editingVersion.name}
                       onChange={e => setEditingVersion({ ...editingVersion, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="settings-field">
+                    <label className="settings-field-label" htmlFor={`version-month-${version.id}`}>Bulan</label>
+                    <select
+                      id={`version-month-${version.id}`}
+                      className="settings-field-input"
+                      value={editingVersion.month ?? ''}
+                      onChange={e => setEditingVersion({ ...editingVersion, month: parseInt(e.target.value, 10) || null })}
+                    >
+                      <option value="">Pilih bulan</option>
+                      {months.map(month => (
+                        <option key={month} value={month}>{getMonthName(month)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="settings-field">
+                    <label className="settings-field-label" htmlFor={`version-year-${version.id}`}>Tahun</label>
+                    <input
+                      id={`version-year-${version.id}`}
+                      className="settings-field-input"
+                      type="number"
+                      inputMode="numeric"
+                      min={2000}
+                      max={2100}
+                      value={editingVersion.year ?? ''}
+                      onChange={e => setEditingVersion({ ...editingVersion, year: parseInt(e.target.value, 10) || null })}
                     />
                   </div>
                   {budgetFields.map(field => (
@@ -245,6 +285,26 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
               value={newVersionName}
               onChange={e => setNewVersionName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCreateVersion()}
+            />
+            <select
+              className="new-version-select"
+              value={newVersionMonth}
+              onChange={e => setNewVersionMonth(parseInt(e.target.value, 10))}
+              aria-label="Bulan config baru"
+            >
+              {months.map(month => (
+                <option key={month} value={month}>{getMonthName(month).slice(0, 3)}</option>
+              ))}
+            </select>
+            <input
+              className="new-version-select year"
+              type="number"
+              inputMode="numeric"
+              min={2000}
+              max={2100}
+              value={newVersionYear}
+              onChange={e => setNewVersionYear(parseInt(e.target.value, 10) || currentCycle.year)}
+              aria-label="Tahun config baru"
             />
             <button className="btn btn-primary" onClick={handleCreateVersion} disabled={!newVersionName.trim()}>
               + Buat

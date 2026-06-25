@@ -7,18 +7,19 @@ types.setTypeParser(1114, (val: string) => val); // TIMESTAMP
 types.setTypeParser(1184, (val: string) => val); // TIMESTAMPTZ
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: parseInt(process.env.DB_PORT || '5432'),
+  connectionString: process.env.DB_PG_NEON,
+  host: process.env.DB_PG_NEON ? undefined : process.env.DB_HOST,
+  user: process.env.DB_PG_NEON ? undefined : process.env.DB_USER,
+  password: process.env.DB_PG_NEON ? undefined : process.env.DB_PASSWORD,
+  database: process.env.DB_PG_NEON ? undefined : process.env.DB_NAME,
+  port: process.env.DB_PG_NEON ? undefined : parseInt(process.env.DB_PORT || '5432'),
   max: 5,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
-  ssl: false,
+  ssl: process.env.DB_PG_NEON ? { rejectUnauthorized: false } : false,
 });
 
-const schema = process.env.DB_SCHEMA || 'budget_app';
+const schema = process.env.DB_SCHEMA || 'public';
 
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,

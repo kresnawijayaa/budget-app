@@ -46,7 +46,16 @@ export async function POST(request: Request) {
         // Determine config version: use provided, or latest
         let versionId: number | null = requestedVersionId ?? null;
         if (!versionId) {
-            const latestVersion = await query('SELECT id FROM config_versions ORDER BY id DESC LIMIT 1');
+            const latestVersion = await query(
+                `SELECT id
+                 FROM config_versions
+                 ORDER BY
+                    (year IS NULL OR month IS NULL) ASC,
+                    year DESC NULLS LAST,
+                    month DESC NULLS LAST,
+                    id DESC
+                 LIMIT 1`
+            );
             versionId = latestVersion.rows.length > 0 ? (latestVersion.rows[0] as { id: number }).id : null;
         } else {
             const versionExists = await query('SELECT id FROM config_versions WHERE id = $1', [versionId]);

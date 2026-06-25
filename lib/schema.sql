@@ -1,19 +1,20 @@
 -- Budget App Schema (current)
 -- Use this file for a fresh database. Existing databases should apply
 -- migration-v2.sql through the latest migration instead.
-CREATE SCHEMA IF NOT EXISTS budget_app;
-SET search_path TO budget_app;
+SET search_path TO public;
 
 -- Config versions (budget presets)
 CREATE TABLE IF NOT EXISTS config_versions (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
+  year INT CHECK (year IS NULL OR year BETWEEN 2000 AND 2100),
+  month INT CHECK (month IS NULL OR month BETWEEN 1 AND 12),
   weekday_budget INT NOT NULL DEFAULT 80000 CHECK (weekday_budget >= 0),
   weekend_budget INT NOT NULL DEFAULT 70000 CHECK (weekend_budget >= 0),
   carbo_loading_budget INT NOT NULL DEFAULT 115000 CHECK (carbo_loading_budget >= 0),
   parking_per_day INT NOT NULL DEFAULT 5000 CHECK (parking_per_day >= 0),
   gas_per_fill INT NOT NULL DEFAULT 50000 CHECK (gas_per_fill >= 0),
-  gas_fill_interval_days INT NOT NULL DEFAULT 3 CHECK (gas_fill_interval_days > 0),
+  gas_fill_interval_days INT NOT NULL DEFAULT 3 CHECK (gas_fill_interval_days >= 0),
   created_at TIMESTAMP DEFAULT NOW()
 );
 

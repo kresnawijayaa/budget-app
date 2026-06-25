@@ -1,6 +1,8 @@
 export interface ConfigVersion {
     id: number;
     name: string;
+    year: number | null;
+    month: number | null;
     weekday_budget: number;
     weekend_budget: number;
     carbo_loading_budget: number;

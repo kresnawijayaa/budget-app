@@ -21,7 +21,11 @@ export async function GET(request: Request) {
             WITH latest_config AS (
                 SELECT id
                 FROM config_versions
-                ORDER BY id DESC
+                ORDER BY
+                    (year IS NULL OR month IS NULL) ASC,
+                    year DESC NULLS LAST,
+                    month DESC NULLS LAST,
+                    id DESC
                 LIMIT 1
             ),
             cycle_variances AS (

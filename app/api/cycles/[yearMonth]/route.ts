@@ -56,7 +56,11 @@ export async function GET(
             latest_config AS (
                 SELECT id
                 FROM config_versions
-                ORDER BY id DESC
+                ORDER BY
+                    (year IS NULL OR month IS NULL) ASC,
+                    year DESC NULLS LAST,
+                    month DESC NULLS LAST,
+                    id DESC
                 LIMIT 1
             ),
             cycle_variances AS (
@@ -160,7 +164,14 @@ export async function GET(
                     'current_balance', ocs.initial_cash + ocs.variance_before_current_month + ocs.current_month_variance
                 ) AS operational_cash,
                 COALESCE((
-                    SELECT jsonb_agg(to_jsonb(all_cv) ORDER BY all_cv.id ASC)
+                    SELECT jsonb_agg(
+                        to_jsonb(all_cv)
+                        ORDER BY
+                            (all_cv.year IS NULL OR all_cv.month IS NULL) ASC,
+                            all_cv.year DESC NULLS LAST,
+                            all_cv.month DESC NULLS LAST,
+                            all_cv.id DESC
+                    )
                     FROM config_versions all_cv
                 ), '[]'::jsonb) AS config_versions,
                 COALESCE((

@@ -21,6 +21,11 @@ export async function PUT(
         const name = body.name === undefined ? undefined : parseRequiredText(body.name, 'name', 100);
         if (name && !name.ok) return NextResponse.json({ error: name.error }, { status: 400 });
 
+        const year = parseInteger(body.year, 'year', { min: 2000, max: 2100 });
+        if (!year.ok) return NextResponse.json({ error: year.error }, { status: 400 });
+        const month = parseInteger(body.month, 'month', { min: 1, max: 12 });
+        if (!month.ok) return NextResponse.json({ error: month.error }, { status: 400 });
+
         const weekdayBudget = parseInteger(body.weekday_budget, 'weekday_budget', { min: 0 });
         if (!weekdayBudget.ok) return NextResponse.json({ error: weekdayBudget.error }, { status: 400 });
         const weekendBudget = parseInteger(body.weekend_budget, 'weekend_budget', { min: 0 });
@@ -31,21 +36,25 @@ export async function PUT(
         if (!parkingPerDay.ok) return NextResponse.json({ error: parkingPerDay.error }, { status: 400 });
         const gasPerFill = parseInteger(body.gas_per_fill, 'gas_per_fill', { min: 0 });
         if (!gasPerFill.ok) return NextResponse.json({ error: gasPerFill.error }, { status: 400 });
-        const gasFillIntervalDays = parseInteger(body.gas_fill_interval_days, 'gas_fill_interval_days', { min: 1 });
+        const gasFillIntervalDays = parseInteger(body.gas_fill_interval_days, 'gas_fill_interval_days', { min: 0 });
         if (!gasFillIntervalDays.ok) return NextResponse.json({ error: gasFillIntervalDays.error }, { status: 400 });
 
         const result = await query<ConfigVersion>(
             `UPDATE config_versions SET
                 name = COALESCE($1, name),
-                weekday_budget = COALESCE($2, weekday_budget),
-                weekend_budget = COALESCE($3, weekend_budget),
-                carbo_loading_budget = COALESCE($4, carbo_loading_budget),
-                parking_per_day = COALESCE($5, parking_per_day),
-                gas_per_fill = COALESCE($6, gas_per_fill),
-                gas_fill_interval_days = COALESCE($7, gas_fill_interval_days)
-             WHERE id = $8 RETURNING *`,
+                year = COALESCE($2, year),
+                month = COALESCE($3, month),
+                weekday_budget = COALESCE($4, weekday_budget),
+                weekend_budget = COALESCE($5, weekend_budget),
+                carbo_loading_budget = COALESCE($6, carbo_loading_budget),
+                parking_per_day = COALESCE($7, parking_per_day),
+                gas_per_fill = COALESCE($8, gas_per_fill),
+                gas_fill_interval_days = COALESCE($9, gas_fill_interval_days)
+             WHERE id = $10 RETURNING *`,
             [
                 name?.value,
+                year.value,
+                month.value,
                 weekdayBudget.value,
                 weekendBudget.value,
                 carboLoadingBudget.value,

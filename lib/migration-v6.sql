@@ -1,4 +1,4 @@
-SET search_path TO budget_app;
+SET search_path TO public;
 
 -- Add initial cash balance for operational cash tracking.
 

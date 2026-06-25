@@ -158,6 +158,7 @@ select:disabled {
 .operational-log-toggle:focus-visible,
 .month-picker-btn:focus-visible,
 .month-chip:focus-visible,
+.new-version-select:focus-visible,
 .day-card:focus-visible,
 .toggle:focus-visible,
 .spent-zero-toggle:focus-visible {
@@ -1607,14 +1608,29 @@ select:disabled {
 .version-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 8px;
+}
+
+.version-title-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .version-name {
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.version-period {
+  color: var(--accent-light);
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .version-actions {
@@ -1692,6 +1708,7 @@ select:disabled {
 
 .new-version-input {
   flex: 1;
+  min-width: 0;
   padding: 10px 14px;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -1703,6 +1720,28 @@ select:disabled {
 }
 
 .new-version-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.new-version-select {
+  width: 82px;
+  min-height: 44px;
+  padding: 10px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-weight: 700;
+  outline: none;
+  transition: var(--transition);
+}
+
+.new-version-select.year {
+  width: 90px;
+}
+
+.new-version-select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
@@ -1917,6 +1956,11 @@ select:disabled {
   .new-version-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .new-version-select,
+  .new-version-select.year {
+    width: 100%;
   }
 
   .pin-grid {

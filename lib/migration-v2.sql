@@ -1,4 +1,4 @@
-SET search_path TO budget_app;
+SET search_path TO public;
 
 -- Historical migration only. Fresh databases should use schema.sql.
 
